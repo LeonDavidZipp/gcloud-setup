@@ -23,6 +23,7 @@ func init() {
 	rootCmd.AddCommand(initCmd)
 }
 
+// runInit creates the workflow file and environment template in the current directory.
 func runInit(cmd *cobra.Command, args []string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -65,6 +66,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// writeFileIfNotExists creates a file with the given content only if it does not already exist.
 func writeFileIfNotExists(path string, content []byte) error {
 	if _, err := os.Stat(path); err == nil {
 		return fmt.Errorf("file already exists: %s", path)
@@ -72,6 +74,7 @@ func writeFileIfNotExists(path string, content []byte) error {
 	return os.WriteFile(path, content, 0644)
 }
 
+// appendToGitignore adds the .env.gcloud entry to .gitignore if not already present.
 func appendToGitignore(path string) error {
 	entry := "\n# GCloud setup\n.env.gcloud\n"
 
@@ -94,10 +97,12 @@ func appendToGitignore(path string) error {
 	return os.WriteFile(path, []byte(entry), 0644)
 }
 
+// contains checks if string s contains the substring substr.
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstring(s, substr))
 }
 
+// containsSubstring performs a simple substring search.
 func containsSubstring(s, substr string) bool {
 	for i := 0; i <= len(s)-len(substr); i++ {
 		if s[i:i+len(substr)] == substr {

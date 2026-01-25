@@ -21,6 +21,7 @@ Commands:
   gcsetup setup  - Set up GCloud project and GitHub repository`,
 }
 
+// Execute runs the root command and exits on error.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -60,6 +61,7 @@ func init() {
 	viper.BindPFlag("CLOUD_RUN_REGION", rootCmd.PersistentFlags().Lookup("cloud-run-region"))
 }
 
+// initConfig initializes viper configuration from file and environment variables.
 func initConfig() {
 	if cfgFile != "" {
 		viper.SetConfigFile(cfgFile)
@@ -69,17 +71,15 @@ func initConfig() {
 		viper.AddConfigPath(".")
 	}
 
-	// Read from environment variables
 	viper.AutomaticEnv()
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 
-	// Try to read config file (don't error if not found)
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Println("Using config file:", viper.ConfigFileUsed())
 	}
 }
 
-// RequiredVars are the environment variables needed for setup
+// RequiredVars lists all environment variables required for setup.
 var RequiredVars = []string{
 	"GCP_PROJECT_ID",
 	"GCP_PROJECT_NUMBER",
@@ -92,7 +92,7 @@ var RequiredVars = []string{
 	"CLOUD_RUN_REGION",
 }
 
-// ValidateConfig checks that all required variables are set
+// ValidateConfig verifies that all required environment variables are set.
 func ValidateConfig() error {
 	var missing []string
 	for _, v := range RequiredVars {
