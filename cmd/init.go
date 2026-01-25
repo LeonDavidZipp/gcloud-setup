@@ -88,12 +88,11 @@ func appendToGitignore(path string) error {
 		if err != nil {
 			return err
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		_, err = f.WriteString(entry)
 		return err
 	}
 
-	// Create new .gitignore
 	return os.WriteFile(path, []byte(entry), 0644)
 }
 

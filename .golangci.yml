@@ -1,0 +1,36 @@
+version: "2"
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - gcsetup
+
+linters:
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - ineffassign
+    - lll
+    - gocyclo
+    - misspell
+    - unconvert
+    - unparam
+    - nakedret
+  settings:
+    lll:
+      line-length: 120
+      tab-width: 4
+    gocyclo:
+      min-complexity: 40
+    nakedret:
+      max-func-lines: 30
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

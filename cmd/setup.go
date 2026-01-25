@@ -191,7 +191,7 @@ CLOUD_RUN_REGION=%s
 func ensureGitignore(entry string) {
 	data, err := os.ReadFile(".gitignore")
 	if err != nil {
-		os.WriteFile(".gitignore", []byte(entry+"\n"), 0644)
+		_ = os.WriteFile(".gitignore", []byte(entry+"\n"), 0644)
 		return
 	}
 
@@ -204,12 +204,12 @@ func ensureGitignore(entry string) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if len(content) == 0 || content[len(content)-1] == '\n' {
-		f.WriteString(entry + "\n")
+		_, _ = f.WriteString(entry + "\n")
 	} else {
-		f.WriteString("\n" + entry + "\n")
+		_, _ = f.WriteString("\n" + entry + "\n")
 	}
 }
 
@@ -232,8 +232,11 @@ func loadConfig() Config {
 		ArtifactRegistryLocation: arLocation,
 		CloudRunService:          viper.GetString("CLOUD_RUN_SERVICE"),
 		CloudRunRegion:           viper.GetString("CLOUD_RUN_REGION"),
-		WorkloadIdentityProvider: fmt.Sprintf("projects/%s/locations/global/workloadIdentityPools/github-pool/providers/github-provider", projectNumber),
-		ArtifactRegistryURL:      fmt.Sprintf("%s-docker.pkg.dev/%s/%s", arLocation, projectID, arName),
+		WorkloadIdentityProvider: fmt.Sprintf(
+			"projects/%s/locations/global/workloadIdentityPools/github-pool/providers/github-provider",
+			projectNumber,
+		),
+		ArtifactRegistryURL: fmt.Sprintf("%s-docker.pkg.dev/%s/%s", arLocation, projectID, arName),
 	}
 }
 
@@ -341,7 +344,7 @@ func interactiveConfig() error {
 				input = strings.TrimSpace(input)
 				idx := 0
 				if input != "" {
-					fmt.Sscanf(input, "%d", &idx)
+					_, _ = fmt.Sscanf(input, "%d", &idx)
 					idx--
 				}
 				if idx >= 0 && idx < len(billingAccounts) {
@@ -353,14 +356,19 @@ func interactiveConfig() error {
 
 			// Create the project
 			fmt.Printf("  Creating project %s...\n", projectID)
-			if err := runCommandSilent("gcloud", "projects", "create", projectID, "--name="+projectName); err != nil {
+			err := runCommandSilent("projects", "create", projectID, "--name="+projectName)
+			if err != nil {
 				return fmt.Errorf("failed to create project: %w", err)
 			}
 
 			// Link billing
 			if selectedBilling != "" {
 				fmt.Printf("  Linking billing account...\n")
-				if err := runCommandSilent("gcloud", "billing", "projects", "link", projectID, "--billing-account="+selectedBilling); err != nil {
+				err := runCommandSilent(
+					"billing", "projects", "link", projectID,
+					"--billing-account="+selectedBilling,
+				)
+				if err != nil {
 					fmt.Println("  ⚠ Warning: Could not link billing account")
 				}
 			}
@@ -368,7 +376,7 @@ func interactiveConfig() error {
 
 		// Set as active project
 		fmt.Printf("  Setting active project...\n")
-		if err := runCommandSilent("gcloud", "config", "set", "project", projectID); err != nil {
+		if err := runCommandSilent("config", "set", "project", projectID); err != nil {
 			fmt.Println("  ⚠ Warning: Could not set active project")
 		}
 
@@ -550,8 +558,7 @@ func listBillingAccounts() ([]billingAccount, error) {
 
 // randomSuffix generates a random 4-digit number for creating unique project IDs.
 func randomSuffix() int {
-	rand.Seed(time.Now().UnixNano())
-	return rand.Intn(9000) + 1000 // 4-digit random number
+	return rand.Intn(9000) + 1000
 }
 
 // checkGcloud verifies that the gcloud CLI is installed and available in PATH.
@@ -574,27 +581,14 @@ func checkGH() error {
 	return nil
 }
 
-// runCommand executes a shell command with output directed to stdout/stderr.
+// runCommandSilent executes a gcloud command and captures output silently.
 // In dry-run mode, it prints the command without executing.
-func runCommand(name string, args ...string) error {
+func runCommandSilent(args ...string) error {
 	if dryRun {
-		fmt.Printf("  [dry-run] %s %s\n", name, strings.Join(args, " "))
+		fmt.Printf("  [dry-run] gcloud %s\n", strings.Join(args, " "))
 		return nil
 	}
-	cmd := exec.Command(name, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
-// runCommandSilent executes a shell command and captures output silently.
-// In dry-run mode, it prints the command without executing.
-func runCommandSilent(name string, args ...string) error {
-	if dryRun {
-		fmt.Printf("  [dry-run] %s %s\n", name, strings.Join(args, " "))
-		return nil
-	}
-	cmd := exec.Command(name, args...)
+	cmd := exec.Command("gcloud", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
@@ -616,7 +610,7 @@ func enableAPIs(cfg Config) error {
 
 	for _, api := range apis {
 		fmt.Printf("  Enabling %s\n", api)
-		if err := runCommandSilent("gcloud", "services", "enable", api, "--project="+cfg.ProjectID); err != nil {
+		if err := runCommandSilent("services", "enable", api, "--project="+cfg.ProjectID); err != nil {
 			return err
 		}
 	}
@@ -626,7 +620,7 @@ func enableAPIs(cfg Config) error {
 // createServiceAccount creates a GCP service account and grants it the necessary IAM roles for CI/CD.
 func createServiceAccount(cfg Config) error {
 	fmt.Printf("  Creating service account: %s\n", cfg.ServiceAccountName)
-	err := runCommandSilent("gcloud", "iam", "service-accounts", "create", cfg.ServiceAccountName,
+	err := runCommandSilent("iam", "service-accounts", "create", cfg.ServiceAccountName,
 		"--project="+cfg.ProjectID,
 		"--display-name="+cfg.ServiceAccountName+" Service Account",
 		"--description=Service account for GitHub Actions CI/CD",
@@ -646,7 +640,7 @@ func createServiceAccount(cfg Config) error {
 
 	for _, role := range roles {
 		fmt.Printf("  Granting %s\n", role)
-		if err := runCommandSilent("gcloud", "projects", "add-iam-policy-binding", cfg.ProjectID,
+		if err := runCommandSilent("projects", "add-iam-policy-binding", cfg.ProjectID,
 			"--member=serviceAccount:"+cfg.ServiceAccountEmail,
 			"--role="+role,
 			"--condition=None",
@@ -661,7 +655,7 @@ func createServiceAccount(cfg Config) error {
 // setupWorkloadIdentity creates the Workload Identity Pool and OIDC Provider for GitHub Actions authentication.
 func setupWorkloadIdentity(cfg Config) error {
 	fmt.Println("  Creating Workload Identity Pool...")
-	err := runCommandSilent("gcloud", "iam", "workload-identity-pools", "create", "github-pool",
+	err := runCommandSilent("iam", "workload-identity-pools", "create", "github-pool",
 		"--project="+cfg.ProjectID,
 		"--location=global",
 		"--display-name=GitHub Actions Pool",
@@ -671,12 +665,15 @@ func setupWorkloadIdentity(cfg Config) error {
 	}
 
 	fmt.Println("  Creating OIDC Provider...")
-	err = runCommandSilent("gcloud", "iam", "workload-identity-pools", "providers", "create-oidc", "github-provider",
+	attrMapping := "google.subject=assertion.sub," +
+		"attribute.actor=assertion.actor," +
+		"attribute.repository=assertion.repository"
+	err = runCommandSilent("iam", "workload-identity-pools", "providers", "create-oidc", "github-provider",
 		"--project="+cfg.ProjectID,
 		"--location=global",
 		"--workload-identity-pool=github-pool",
 		"--display-name=GitHub Provider",
-		"--attribute-mapping=google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository",
+		"--attribute-mapping="+attrMapping,
 		"--issuer-uri=https://token.actions.githubusercontent.com",
 	)
 	if err != nil {
@@ -684,10 +681,13 @@ func setupWorkloadIdentity(cfg Config) error {
 	}
 
 	fmt.Println("  Configuring repository access...")
-	member := fmt.Sprintf("principalSet://iam.googleapis.com/projects/%s/locations/global/workloadIdentityPools/github-pool/attribute.repository/%s/%s",
-		cfg.ProjectNumber, cfg.GitHubOrg, cfg.GitHubRepo)
+	member := fmt.Sprintf(
+		"principalSet://iam.googleapis.com/projects/%s/locations/global/"+
+			"workloadIdentityPools/github-pool/attribute.repository/%s/%s",
+		cfg.ProjectNumber, cfg.GitHubOrg, cfg.GitHubRepo,
+	)
 
-	return runCommandSilent("gcloud", "iam", "service-accounts", "add-iam-policy-binding", cfg.ServiceAccountEmail,
+	return runCommandSilent("iam", "service-accounts", "add-iam-policy-binding", cfg.ServiceAccountEmail,
 		"--project="+cfg.ProjectID,
 		"--role=roles/iam.workloadIdentityUser",
 		"--member="+member,
@@ -697,7 +697,7 @@ func setupWorkloadIdentity(cfg Config) error {
 // createArtifactRegistry creates a Docker repository in GCP Artifact Registry.
 func createArtifactRegistry(cfg Config) error {
 	fmt.Printf("  Creating repository: %s\n", cfg.ArtifactRegistryName)
-	err := runCommandSilent("gcloud", "artifacts", "repositories", "create", cfg.ArtifactRegistryName,
+	err := runCommandSilent("artifacts", "repositories", "create", cfg.ArtifactRegistryName,
 		"--project="+cfg.ProjectID,
 		"--location="+cfg.ArtifactRegistryLocation,
 		"--repository-format=docker",

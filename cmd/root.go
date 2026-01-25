@@ -50,15 +50,15 @@ func init() {
 	rootCmd.PersistentFlags().String("cloud-run-region", "", "Cloud Run Region")
 
 	// Bind flags to viper
-	viper.BindPFlag("GCP_PROJECT_ID", rootCmd.PersistentFlags().Lookup("gcp-project-id"))
-	viper.BindPFlag("GCP_PROJECT_NUMBER", rootCmd.PersistentFlags().Lookup("gcp-project-number"))
-	viper.BindPFlag("SERVICE_ACCOUNT_NAME", rootCmd.PersistentFlags().Lookup("service-account-name"))
-	viper.BindPFlag("ARTIFACT_REGISTRY_NAME", rootCmd.PersistentFlags().Lookup("artifact-registry-name"))
-	viper.BindPFlag("ARTIFACT_REGISTRY_LOCATION", rootCmd.PersistentFlags().Lookup("artifact-registry-location"))
-	viper.BindPFlag("GITHUB_ORGANIZATION", rootCmd.PersistentFlags().Lookup("github-org"))
-	viper.BindPFlag("GITHUB_REPOSITORY", rootCmd.PersistentFlags().Lookup("github-repo"))
-	viper.BindPFlag("CLOUD_RUN_SERVICE", rootCmd.PersistentFlags().Lookup("cloud-run-service"))
-	viper.BindPFlag("CLOUD_RUN_REGION", rootCmd.PersistentFlags().Lookup("cloud-run-region"))
+	_ = viper.BindPFlag("GCP_PROJECT_ID", rootCmd.PersistentFlags().Lookup("gcp-project-id"))
+	_ = viper.BindPFlag("GCP_PROJECT_NUMBER", rootCmd.PersistentFlags().Lookup("gcp-project-number"))
+	_ = viper.BindPFlag("SERVICE_ACCOUNT_NAME", rootCmd.PersistentFlags().Lookup("service-account-name"))
+	_ = viper.BindPFlag("ARTIFACT_REGISTRY_NAME", rootCmd.PersistentFlags().Lookup("artifact-registry-name"))
+	_ = viper.BindPFlag("ARTIFACT_REGISTRY_LOCATION", rootCmd.PersistentFlags().Lookup("artifact-registry-location"))
+	_ = viper.BindPFlag("GITHUB_ORGANIZATION", rootCmd.PersistentFlags().Lookup("github-org"))
+	_ = viper.BindPFlag("GITHUB_REPOSITORY", rootCmd.PersistentFlags().Lookup("github-repo"))
+	_ = viper.BindPFlag("CLOUD_RUN_SERVICE", rootCmd.PersistentFlags().Lookup("cloud-run-service"))
+	_ = viper.BindPFlag("CLOUD_RUN_REGION", rootCmd.PersistentFlags().Lookup("cloud-run-region"))
 }
 
 // initConfig initializes viper configuration from file and environment variables.
