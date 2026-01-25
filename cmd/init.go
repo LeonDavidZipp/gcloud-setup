@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"gc/embedded"
+	"gcsetup/embedded"
 
 	"github.com/spf13/cobra"
 )

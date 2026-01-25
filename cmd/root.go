@@ -12,13 +12,13 @@ import (
 var cfgFile string
 
 var rootCmd = &cobra.Command{
-	Use:   "gc",
+	Use:   "gcsetup",
 	Short: "GCloud project setup CLI",
 	Long: `A CLI tool to set up GCloud projects with GitHub Actions CI/CD.
 
 Commands:
-  gc init   - Initialize project with workflow and .env.gcloud template
-  gc setup  - Set up GCloud project and GitHub repository`,
+  gcsetup init   - Initialize project with workflow and .env.gcloud template
+  gcsetup setup  - Set up GCloud project and GitHub repository`,
 }
 
 func Execute() {

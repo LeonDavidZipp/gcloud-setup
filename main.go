@@ -1,7 +1,7 @@
 package main
 
 import (
-	"gc/cmd"
+	"gcsetup/cmd"
 )
 
 func main() {
