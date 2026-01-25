@@ -15,6 +15,7 @@ A CLI tool to set up GCloud projects with GitHub Actions CI/CD in a single comma
 **GitHub Setup:**
 - Configures repository secrets for GCP authentication
 - Sets repository variables for deployment configuration
+- Creates deployment environments (development, staging, production, preview)
 
 **Project Setup:**
 - Adds a production-ready GitHub Actions workflow
@@ -104,7 +105,7 @@ This executes all setup steps:
 2. Creates service account with CI/CD roles
 3. Configures Workload Identity Federation
 4. Creates Artifact Registry repository
-5. Sets GitHub secrets and variables
+5. Sets GitHub secrets, variables, and environments
 
 ### Alternative: Use flags
 
@@ -182,6 +183,19 @@ gcsetup setup --dry-run
 | Variable | `CLOUD_RUN_SERVICE` | Cloud Run service name |
 | Variable | `CLOUD_RUN_REGION` | Deployment region |
 | Variable | `ARTIFACT_REGISTRY_URL` | Full registry URL |
+
+### Environments
+
+The following deployment environments are created:
+
+| Environment | Purpose |
+|-------------|----------|
+| `development` | Development deployments |
+| `staging` | Pre-production testing |
+| `production` | Production deployments |
+| `preview` | Pull request preview deployments |
+
+> **💡 Tip:** Add protection rules in GitHub → Settings → Environments. For `production`, consider requiring reviewers before deployment.
 
 ## The Workflow
 

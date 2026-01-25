@@ -750,5 +750,27 @@ func configureGitHub(cfg Config) error {
 		}
 	}
 
+	// Create GitHub environments for deployment tracking and protection rules
+	fmt.Println("  Creating environments...")
+	environments := []string{"development", "staging", "production", "preview"}
+
+	for _, env := range environments {
+		fmt.Printf("    %s\n", env)
+		if dryRun {
+			fmt.Printf("    [dry-run] gh api repos/%s/environments/%s -X PUT\n", repo, env)
+			continue
+		}
+		// Create environment using GitHub API
+		// Note: This creates the environment; protection rules can be configured in GitHub UI
+		cmd := exec.Command("gh", "api", fmt.Sprintf("repos/%s/environments/%s", repo, env), "-X", "PUT")
+		if err := cmd.Run(); err != nil {
+			fmt.Printf("    ⚠ Could not create environment %s (may require admin access)\n", env)
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("  💡 Tip: Add protection rules in GitHub → Settings → Environments")
+	fmt.Println("     For 'production': require reviewers before deployment")
+
 	return nil
 }
