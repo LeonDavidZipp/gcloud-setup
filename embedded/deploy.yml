@@ -1,0 +1,295 @@
+# =============================================================================
+# Unified Deploy Workflow
+# =============================================================================
+# Single workflow handling all deployment scenarios:
+#   - PR opened/updated → Deploy preview environment
+#   - PR closed → Cleanup preview environment
+#   - Push to main → Run tests, then deploy to production
+#   - Tag pushed → Run tests, then deploy to production
+#
+# =============================================================================
+# GITHUB SECRETS (Settings → Secrets and variables → Actions → Secrets)
+# =============================================================================
+# GCP_SERVICE_ACCOUNT
+#   The service account email for GitHub Actions
+#   Example: github-actions@my-project.iam.gserviceaccount.com
+#
+# GCP_WORKLOAD_IDENTITY_PROVIDER
+#   The full Workload Identity Provider resource name
+#   Example: projects/123456789/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+#
+# =============================================================================
+# GITHUB VARIABLES (Settings → Secrets and variables → Actions → Variables)
+# =============================================================================
+# CLOUD_RUN_SERVICE
+#   Name of your Cloud Run service (will be created if it doesn't exist)
+#   Example: my-api
+#
+# CLOUD_RUN_REGION
+#   GCP region for Cloud Run deployment
+#   Example: europe-west1
+#
+# ARTIFACT_REGISTRY_URL
+#   Full URL to your Artifact Registry repository (without image name)
+#   Example: europe-west1-docker.pkg.dev/my-project/docker-registry
+#
+# =============================================================================
+
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+concurrency:
+  group: deploy-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+env:
+  REGION: ${{ vars.CLOUD_RUN_REGION }}
+  REGISTRY_URL: ${{ vars.ARTIFACT_REGISTRY_URL }}
+  BASE_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+
+jobs:
+  # ===========================================================================
+  # Determine deployment context
+  # ===========================================================================
+  context:
+    name: Determine Context
+    runs-on: ubuntu-latest
+    outputs:
+      is_production: ${{ steps.check.outputs.is_production }}
+      is_preview: ${{ steps.check.outputs.is_preview }}
+      is_cleanup: ${{ steps.check.outputs.is_cleanup }}
+      service_name: ${{ steps.check.outputs.service_name }}
+      image_tag: ${{ steps.check.outputs.image_tag }}
+    steps:
+      - name: Check deployment type
+        id: check
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.event.action }}" == "closed" ]]; then
+            echo "is_production=false" >> $GITHUB_OUTPUT
+            echo "is_preview=false" >> $GITHUB_OUTPUT
+            echo "is_cleanup=true" >> $GITHUB_OUTPUT
+            echo "service_name=${{ env.BASE_SERVICE }}-pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+            echo "image_tag=pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "is_production=false" >> $GITHUB_OUTPUT
+            echo "is_preview=true" >> $GITHUB_OUTPUT
+            echo "is_cleanup=false" >> $GITHUB_OUTPUT
+            echo "service_name=${{ env.BASE_SERVICE }}-pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+            echo "image_tag=pr-${{ github.event.pull_request.number }}-${{ github.sha }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${{ github.ref_name }}"
+            echo "is_production=true" >> $GITHUB_OUTPUT
+            echo "is_preview=false" >> $GITHUB_OUTPUT
+            echo "is_cleanup=false" >> $GITHUB_OUTPUT
+            echo "service_name=${{ env.BASE_SERVICE }}" >> $GITHUB_OUTPUT
+            echo "image_tag=${TAG}" >> $GITHUB_OUTPUT
+          else
+            echo "is_production=true" >> $GITHUB_OUTPUT
+            echo "is_preview=false" >> $GITHUB_OUTPUT
+            echo "is_cleanup=false" >> $GITHUB_OUTPUT
+            echo "service_name=${{ env.BASE_SERVICE }}" >> $GITHUB_OUTPUT
+            echo "image_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
+  # ===========================================================================
+  # Tests (required for production deployments)
+  # ===========================================================================
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: context
+    if: needs.context.outputs.is_cleanup == 'false'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Add your test steps here
+      - name: Run tests
+        run: |
+          echo "Running tests..."
+          # npm test
+          # pytest
+          # go test ./...
+
+  # ===========================================================================
+  # Build and Push Docker Image (using Cloud Build)
+  # ===========================================================================
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [context, test]
+    if: needs.context.outputs.is_cleanup == 'false'
+
+    permissions:
+      contents: read
+      id-token: write
+
+    outputs:
+      image: ${{ steps.build.outputs.image }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build with Cloud Build
+        id: build
+        run: |
+          IMAGE="${{ env.REGISTRY_URL }}/${{ env.BASE_SERVICE }}:${{ needs.context.outputs.image_tag }}"
+          gcloud builds submit \
+            --tag "$IMAGE" \
+            --quiet
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+
+  # ===========================================================================
+  # Deploy Preview (PRs only)
+  # ===========================================================================
+  deploy-preview:
+    name: Deploy Preview
+    runs-on: ubuntu-latest
+    needs: [context, build]
+    if: needs.context.outputs.is_preview == 'true'
+    environment:
+      name: preview
+      url: ${{ steps.deploy.outputs.url }}
+
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ needs.context.outputs.service_name }}
+          region: ${{ env.REGION }}
+          image: ${{ needs.build.outputs.image }}
+          flags: --allow-unauthenticated
+
+      - name: Comment Preview URL
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = '${{ steps.deploy.outputs.url }}';
+            const body = `## 🚀 Preview Deployment\n\n**URL:** ${url}\n\n_Deployed at ${new Date().toISOString()}_`;
+            
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(c => 
+              c.user.type === 'Bot' && c.body.includes('Preview Deployment')
+            );
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
+
+  # ===========================================================================
+  # Deploy Production (main branch or tags)
+  # ===========================================================================
+  deploy-production:
+    name: Deploy Production
+    runs-on: ubuntu-latest
+    needs: [context, build]
+    if: needs.context.outputs.is_production == 'true'
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.url }}
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ needs.context.outputs.service_name }}
+          region: ${{ env.REGION }}
+          image: ${{ needs.build.outputs.image }}
+
+      - name: Deployment Summary
+        run: |
+          echo "## 🚀 Production Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Service** | ${{ needs.context.outputs.service_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image** | \`${{ needs.context.outputs.image_tag }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **URL** | ${{ steps.deploy.outputs.url }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Triggered by** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================================================
+  # Cleanup Preview (PR closed)
+  # ===========================================================================
+  cleanup:
+    name: Cleanup Preview
+    runs-on: ubuntu-latest
+    needs: context
+    if: needs.context.outputs.is_cleanup == 'true'
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Delete Cloud Run service
+        run: |
+          gcloud run services delete ${{ needs.context.outputs.service_name }} \
+            --region=${{ env.REGION }} \
+            --quiet || echo "Service not found or already deleted"
