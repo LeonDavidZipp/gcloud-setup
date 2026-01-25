@@ -7,18 +7,13 @@ source "$SCRIPT_DIR/_common.sh"
 # =============================================================================
 # Required Environment Variables
 # =============================================================================
-require_vars GCP_PROJECT_ID
-
-# =============================================================================
-# Optional Environment Variables (with defaults)
-# =============================================================================
-SERVICE_ACCOUNT_NAME="${SERVICE_ACCOUNT_NAME:-github-actions}"
-SERVICE_ACCOUNT_DISPLAY_NAME="${SERVICE_ACCOUNT_DISPLAY_NAME:-GitHub Actions Service Account}"
+require_vars GCP_PROJECT_ID SERVICE_ACCOUNT_NAME
 
 # =============================================================================
 # Derived Variables
 # =============================================================================
 SERVICE_ACCOUNT_EMAIL="${SERVICE_ACCOUNT_NAME}@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
+SERVICE_ACCOUNT_DISPLAY_NAME="${SERVICE_ACCOUNT_NAME} Service Account"
 
 # =============================================================================
 # Roles to Grant

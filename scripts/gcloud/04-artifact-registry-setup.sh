@@ -7,14 +7,7 @@ source "$SCRIPT_DIR/_common.sh"
 # =============================================================================
 # Required Environment Variables
 # =============================================================================
-require_vars GCP_PROJECT_ID
-
-# =============================================================================
-# Optional Environment Variables (with defaults)
-# =============================================================================
-ARTIFACT_REGISTRY_NAME="${ARTIFACT_REGISTRY_NAME:-docker-registry}"
-ARTIFACT_REGISTRY_LOCATION="${ARTIFACT_REGISTRY_LOCATION:-europe-west1}"
-ARTIFACT_REGISTRY_FORMAT="${ARTIFACT_REGISTRY_FORMAT:-docker}"
+require_vars GCP_PROJECT_ID ARTIFACT_REGISTRY_NAME ARTIFACT_REGISTRY_LOCATION
 
 # =============================================================================
 # Create Artifact Registry Repository
@@ -24,7 +17,7 @@ echo "Creating Artifact Registry repository: $ARTIFACT_REGISTRY_NAME"
 gcloud artifacts repositories create "$ARTIFACT_REGISTRY_NAME" \
     --project="$GCP_PROJECT_ID" \
     --location="$ARTIFACT_REGISTRY_LOCATION" \
-    --repository-format="$ARTIFACT_REGISTRY_FORMAT" \
+    --repository-format="docker" \
     --description="Container registry for CI/CD"
 
 # =============================================================================

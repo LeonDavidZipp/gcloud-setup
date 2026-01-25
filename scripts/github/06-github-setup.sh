@@ -7,16 +7,16 @@ source "$SCRIPT_DIR/../gcloud/_common.sh"
 # =============================================================================
 # Required Environment Variables
 # =============================================================================
-require_vars GCP_PROJECT_ID GCP_PROJECT_NUMBER GITHUB_ORGANIZATION GITHUB_REPOSITORY
-
-# =============================================================================
-# Optional Environment Variables (with defaults)
-# =============================================================================
-SERVICE_ACCOUNT_NAME="${SERVICE_ACCOUNT_NAME:-github-actions}"
-ARTIFACT_REGISTRY_NAME="${ARTIFACT_REGISTRY_NAME:-docker-registry}"
-ARTIFACT_REGISTRY_LOCATION="${ARTIFACT_REGISTRY_LOCATION:-europe-west1}"
-CLOUD_RUN_SERVICE="${CLOUD_RUN_SERVICE:-$GITHUB_REPOSITORY}"
-CLOUD_RUN_REGION="${CLOUD_RUN_REGION:-$ARTIFACT_REGISTRY_LOCATION}"
+require_vars \
+    GCP_PROJECT_ID \
+    GCP_PROJECT_NUMBER \
+    GITHUB_ORGANIZATION \
+    GITHUB_REPOSITORY \
+    SERVICE_ACCOUNT_NAME \
+    ARTIFACT_REGISTRY_NAME \
+    ARTIFACT_REGISTRY_LOCATION \
+    CLOUD_RUN_SERVICE \
+    CLOUD_RUN_REGION
 
 # =============================================================================
 # Derived Variables
