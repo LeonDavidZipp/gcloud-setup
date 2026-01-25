@@ -4,8 +4,8 @@
 # Single workflow handling all deployment scenarios:
 #   - PR opened/updated → Deploy preview environment
 #   - PR closed → Cleanup preview environment
-#   - Push to main → Tests → Test deploy to dev (cleanup) → Test deploy to stage (cleanup) → Production
-#   - Tag pushed → Tests → Test deploy to dev (cleanup) → Test deploy to stage (cleanup) → Production
+#   - Push to main → Tests → Test deploy to dev (cleanup) → Deploy to staging (persistent) → Production
+#   - Tag pushed → Tests → Test deploy to dev (cleanup) → Deploy to staging (persistent) → Production
 #
 # =============================================================================
 # GITHUB SECRETS (Settings → Secrets and variables → Actions → Secrets)
@@ -282,14 +282,16 @@ jobs:
             --quiet || echo "Service not found or already deleted"
 
   # ===========================================================================
-  # Test Deploy to Stage (production deployments only)
+  # Deploy to Staging (persistent environment for testing before production)
   # ===========================================================================
-  test-deploy-stage:
-    name: Test Deploy (Stage)
+  deploy-staging:
+    name: Deploy Staging
     runs-on: ubuntu-latest
     needs: [context, build, test-deploy-dev]
     if: needs.context.outputs.is_production == 'true'
-    environment: staging
+    environment:
+      name: staging
+      url: ${{ steps.deploy.outputs.url }}
 
     permissions:
       contents: read
@@ -302,14 +304,11 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Deploy to Cloud Run (Stage)
+      - name: Deploy to Cloud Run (Staging)
         id: deploy
         uses: google-github-actions/deploy-cloudrun@v2
         with:
-          service: ${{ env.BASE_SERVICE }}-test-stage
+          service: ${{ env.BASE_SERVICE }}-staging
           region: ${{ env.REGION }}
           image: ${{ needs.build.outputs.image }}
           flags: --allow-unauthenticated
@@ -331,21 +330,13 @@ jobs:
           echo "❌ Health check failed"
           exit 1
 
-      - name: Cleanup test deployment
-        if: always()
-        run: |
-          echo "Cleaning up staging test deployment..."
-          gcloud run services delete ${{ env.BASE_SERVICE }}-test-stage \
-            --region=${{ env.REGION }} \
-            --quiet || echo "Service not found or already deleted"
-
   # ===========================================================================
-  # Deploy Production (main branch or tags, after test deployments pass)
+  # Deploy Production (main branch or tags, after staging passes)
   # ===========================================================================
   deploy-production:
     name: Deploy Production
     runs-on: ubuntu-latest
-    needs: [context, build, test-deploy-stage]
+    needs: [context, build, deploy-staging]
     if: needs.context.outputs.is_production == 'true'
     environment:
       name: production
