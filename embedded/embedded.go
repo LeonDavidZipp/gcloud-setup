@@ -4,7 +4,7 @@ import (
 	_ "embed"
 )
 
-//go:embed deploy.yml
+//go:embed gcloud-deploy.yml
 var DeployWorkflow []byte
 
 //go:embed env.gcloud.template

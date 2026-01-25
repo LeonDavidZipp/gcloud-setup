@@ -14,7 +14,7 @@ var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize project with workflow and .env.gcloud template",
 	Long: `Creates the following files in your project:
-  - .github/workflows/deploy.yml  (CI/CD workflow)
+  - .github/workflows/gcloud-deploy.yml  (CI/CD workflow)
   - .env.gcloud                   (environment variables template)`,
 	RunE: runInit,
 }
@@ -35,8 +35,8 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create .github/workflows directory: %w", err)
 	}
 
-	// Write deploy.yml
-	workflowPath := filepath.Join(workflowDir, "deploy.yml")
+	// Write gcloud-deploy.yml
+	workflowPath := filepath.Join(workflowDir, "gcloud-deploy.yml")
 	if err := writeFileIfNotExists(workflowPath, embedded.DeployWorkflow); err != nil {
 		return err
 	}

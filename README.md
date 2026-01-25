@@ -60,7 +60,7 @@ gcsetup init
 ```
 
 This creates:
-- `.github/workflows/deploy.yml` — CI/CD workflow
+- `.github/workflows/gcloud-deploy.yml` — CI/CD workflow
 - `.env.gcloud` — Configuration template (added to `.gitignore`)
 
 ### 2. Configure variables
@@ -185,7 +185,7 @@ gcsetup setup --dry-run
 
 ## The Workflow
 
-The generated `.github/workflows/deploy.yml` handles:
+The generated `.github/workflows/gcloud-deploy.yml` handles:
 
 | Trigger | Action |
 |---------|--------|
@@ -208,7 +208,7 @@ The generated `.github/workflows/deploy.yml` handles:
 your-repo/
 ├── .github/
 │   └── workflows/
-│       └── deploy.yml      # Created by `gcsetup init`
+│       └── gcloud-deploy.yml      # Created by `gcsetup init`
 ├── .env.gcloud             # Created by `gcsetup init` (gitignored)
 ├── Dockerfile              # You provide this
 └── ...
