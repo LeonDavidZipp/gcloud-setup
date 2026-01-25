@@ -370,6 +370,12 @@ func interactiveConfig() error {
 			}
 		}
 
+		// Set as active project
+		fmt.Printf("  Setting active project...\n")
+		if err := runCommandSilent("gcloud", "config", "set", "project", projectID); err != nil {
+			fmt.Println("  ⚠ Warning: Could not set active project")
+		}
+
 		// Fetch the project number
 		if dryRun {
 			projectNumber = "123456789012"
@@ -586,7 +592,11 @@ func runCommandSilent(name string, args ...string) error {
 		return nil
 	}
 	cmd := exec.Command(name, args...)
-	return cmd.Run()
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
+	}
+	return nil
 }
 
 func enableAPIs(cfg Config) error {
