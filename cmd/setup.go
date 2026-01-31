@@ -608,12 +608,23 @@ func createServiceAccount(cfg Config) error {
 
 	for _, role := range roles {
 		fmt.Printf("  Granting %s\n", role)
-		if err := runCommandSilent("projects", "add-iam-policy-binding", cfg.ProjectID,
-			"--member=serviceAccount:"+cfg.ServiceAccountEmail,
-			"--role="+role,
-			"--condition=None",
-		); err != nil {
-			return err
+		var bindErr error
+		for attempt := 0; attempt < 120; attempt++ {
+			bindErr = runCommandSilent("projects", "add-iam-policy-binding", cfg.ProjectID,
+				"--member=serviceAccount:"+cfg.ServiceAccountEmail,
+				"--role="+role,
+				"--condition=None",
+			)
+			if bindErr == nil {
+				break
+			}
+			if attempt == 0 {
+				fmt.Printf("    Waiting for service account to propagate...")
+			}
+			time.Sleep(5 * time.Second)
+		}
+		if bindErr != nil {
+			return bindErr
 		}
 	}
 
@@ -681,6 +692,7 @@ func setupWorkloadIdentity(cfg Config) error {
 			"--location=global",
 			"--workload-identity-pool=github-pool",
 			"--display-name=GitHub Provider",
+			"--issuer-uri=https://token.actions.githubusercontent.com",
 			"--attribute-mapping="+attrMapping,
 			"--attribute-condition="+attrCondition,
 		); err != nil {
