@@ -21,7 +21,6 @@ Commands:
   gcsetup setup  - Set up GCloud project and GitHub repository`,
 }
 
-// Execute runs the root command and exits on error.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -34,22 +33,18 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is .env.gcloud)")
 
-	// GCP flags
 	rootCmd.PersistentFlags().String("gcp-project-id", "", "GCP Project ID")
 	rootCmd.PersistentFlags().String("gcp-project-number", "", "GCP Project Number")
 	rootCmd.PersistentFlags().String("service-account-name", "", "Service Account Name")
 	rootCmd.PersistentFlags().String("artifact-registry-name", "", "Artifact Registry Name")
 	rootCmd.PersistentFlags().String("artifact-registry-location", "", "Artifact Registry Location")
 
-	// GitHub flags
 	rootCmd.PersistentFlags().String("github-org", "", "GitHub Organization")
 	rootCmd.PersistentFlags().String("github-repo", "", "GitHub Repository")
 
-	// Cloud Run flags
 	rootCmd.PersistentFlags().String("cloud-run-service", "", "Cloud Run Service Name")
 	rootCmd.PersistentFlags().String("cloud-run-region", "", "Cloud Run Region")
 
-	// Bind flags to viper
 	_ = viper.BindPFlag("GCP_PROJECT_ID", rootCmd.PersistentFlags().Lookup("gcp-project-id"))
 	_ = viper.BindPFlag("GCP_PROJECT_NUMBER", rootCmd.PersistentFlags().Lookup("gcp-project-number"))
 	_ = viper.BindPFlag("SERVICE_ACCOUNT_NAME", rootCmd.PersistentFlags().Lookup("service-account-name"))
@@ -61,7 +56,6 @@ func init() {
 	_ = viper.BindPFlag("CLOUD_RUN_REGION", rootCmd.PersistentFlags().Lookup("cloud-run-region"))
 }
 
-// initConfig initializes viper configuration from file and environment variables.
 func initConfig() {
 	if cfgFile != "" {
 		viper.SetConfigFile(cfgFile)
@@ -79,7 +73,6 @@ func initConfig() {
 	}
 }
 
-// RequiredVars lists all environment variables required for setup.
 var RequiredVars = []string{
 	"GCP_PROJECT_ID",
 	"GCP_PROJECT_NUMBER",
@@ -92,7 +85,6 @@ var RequiredVars = []string{
 	"CLOUD_RUN_REGION",
 }
 
-// ValidateConfig verifies that all required environment variables are set.
 func ValidateConfig() error {
 	var missing []string
 	for _, v := range RequiredVars {
