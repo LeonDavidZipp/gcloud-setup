@@ -603,6 +603,7 @@ func createServiceAccount(cfg Config) error {
 		"roles/secretmanager.secretAccessor",
 		"roles/iam.serviceAccountUser",
 		"roles/cloudbuild.builds.builder",
+		"roles/cloudbuild.builds.viewer",
 		"roles/logging.logWriter",
 	}
 
