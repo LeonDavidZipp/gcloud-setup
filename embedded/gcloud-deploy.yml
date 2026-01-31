@@ -4,8 +4,8 @@
 # Single workflow handling all deployment scenarios:
 #   - PR opened/updated → Deploy preview environment
 #   - PR closed → Cleanup preview environment
-#   - Push to main → Tests → Test deploy to dev (cleanup) → Deploy to staging (persistent) → Production
-#   - Tag pushed → Tests → Test deploy to dev (cleanup) → Deploy to staging (persistent) → Production
+#   - Push to main → Run tests, then deploy to production
+#   - Tag pushed → Run tests, then deploy to production
 #
 # =============================================================================
 # GITHUB SECRETS (Settings → Secrets and variables → Actions → Secrets)
@@ -21,17 +21,21 @@
 # =============================================================================
 # GITHUB VARIABLES (Settings → Secrets and variables → Actions → Variables)
 # =============================================================================
-# CLOUD_RUN_SERVICE
+# GCP_PROJECT_ID
+#   Your Google Cloud project ID
+#   Example: my-project
+#
+# GCP_REGION
+#   GCP region for deployment
+#   Example: europe-west3
+#
+# GCP_ARTIFACT_REGISTRY
+#   Name of your Artifact Registry repository
+#   Example: docker
+#
+# GCP_CLOUD_RUN_SERVICE
 #   Name of your Cloud Run service (will be created if it doesn't exist)
 #   Example: my-api
-#
-# CLOUD_RUN_REGION
-#   GCP region for Cloud Run deployment
-#   Example: europe-west1
-#
-# ARTIFACT_REGISTRY_URL
-#   Full URL to your Artifact Registry repository (without image name)
-#   Example: europe-west1-docker.pkg.dev/my-project/docker-registry
 #
 # =============================================================================
 
@@ -51,9 +55,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REGION: ${{ vars.CLOUD_RUN_REGION }}
-  REGISTRY_URL: ${{ vars.ARTIFACT_REGISTRY_URL }}
-  BASE_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ vars.GCP_REGION }}
+  GCP_ARTIFACT_REGISTRY: ${{ vars.GCP_ARTIFACT_REGISTRY }}
+  GCP_CLOUD_RUN_SERVICE: ${{ vars.GCP_CLOUD_RUN_SERVICE }}
 
 jobs:
   # ===========================================================================
@@ -76,26 +81,26 @@ jobs:
             echo "is_production=false" >> $GITHUB_OUTPUT
             echo "is_preview=false" >> $GITHUB_OUTPUT
             echo "is_cleanup=true" >> $GITHUB_OUTPUT
-            echo "service_name=${{ env.BASE_SERVICE }}-pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+            echo "service_name=${{ env.GCP_CLOUD_RUN_SERVICE }}-pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
             echo "image_tag=pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
           elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
             echo "is_production=false" >> $GITHUB_OUTPUT
             echo "is_preview=true" >> $GITHUB_OUTPUT
             echo "is_cleanup=false" >> $GITHUB_OUTPUT
-            echo "service_name=${{ env.BASE_SERVICE }}-pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+            echo "service_name=${{ env.GCP_CLOUD_RUN_SERVICE }}-pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
             echo "image_tag=pr-${{ github.event.pull_request.number }}-${{ github.sha }}" >> $GITHUB_OUTPUT
           elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             TAG="${{ github.ref_name }}"
             echo "is_production=true" >> $GITHUB_OUTPUT
             echo "is_preview=false" >> $GITHUB_OUTPUT
             echo "is_cleanup=false" >> $GITHUB_OUTPUT
-            echo "service_name=${{ env.BASE_SERVICE }}" >> $GITHUB_OUTPUT
+            echo "service_name=${{ env.GCP_CLOUD_RUN_SERVICE }}" >> $GITHUB_OUTPUT
             echo "image_tag=${TAG}" >> $GITHUB_OUTPUT
           else
             echo "is_production=true" >> $GITHUB_OUTPUT
             echo "is_preview=false" >> $GITHUB_OUTPUT
             echo "is_cleanup=false" >> $GITHUB_OUTPUT
-            echo "service_name=${{ env.BASE_SERVICE }}" >> $GITHUB_OUTPUT
+            echo "service_name=${{ env.GCP_CLOUD_RUN_SERVICE }}" >> $GITHUB_OUTPUT
             echo "image_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
           fi
 
@@ -151,7 +156,7 @@ jobs:
       - name: Build with Cloud Build
         id: build
         run: |
-          IMAGE="${{ env.REGISTRY_URL }}/${{ env.BASE_SERVICE }}:${{ needs.context.outputs.image_tag }}"
+          IMAGE="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_ARTIFACT_REGISTRY }}/${{ env.GCP_CLOUD_RUN_SERVICE }}:${{ needs.context.outputs.image_tag }}"
           gcloud builds submit \
             --tag "$IMAGE" \
             --quiet
@@ -186,7 +191,7 @@ jobs:
         uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: ${{ needs.context.outputs.service_name }}
-          region: ${{ env.REGION }}
+          region: ${{ env.GCP_REGION }}
           image: ${{ needs.build.outputs.image }}
           flags: --allow-unauthenticated
 
@@ -224,119 +229,12 @@ jobs:
             }
 
   # ===========================================================================
-  # Test Deploy to Development (production deployments only)
-  # ===========================================================================
-  test-deploy-dev:
-    name: Test Deploy (Development)
-    runs-on: ubuntu-latest
-    needs: [context, build]
-    if: needs.context.outputs.is_production == 'true'
-    environment: development
-
-    permissions:
-      contents: read
-      id-token: write
-
-    steps:
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Deploy to Cloud Run (Development)
-        id: deploy
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: ${{ env.BASE_SERVICE }}-test-dev
-          region: ${{ env.REGION }}
-          image: ${{ needs.build.outputs.image }}
-          flags: --allow-unauthenticated
-
-      - name: Run smoke tests
-        run: |
-          echo "Running smoke tests against development..."
-          URL="${{ steps.deploy.outputs.url }}"
-          # Basic health check
-          for i in {1..5}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL" || echo "000")
-            if [[ "$STATUS" == "200" || "$STATUS" == "204" ]]; then
-              echo "✅ Health check passed (HTTP $STATUS)"
-              exit 0
-            fi
-            echo "Attempt $i: HTTP $STATUS, retrying in 5s..."
-            sleep 5
-          done
-          echo "❌ Health check failed"
-          exit 1
-
-      - name: Cleanup test deployment
-        if: always()
-        run: |
-          echo "Cleaning up development test deployment..."
-          gcloud run services delete ${{ env.BASE_SERVICE }}-test-dev \
-            --region=${{ env.REGION }} \
-            --quiet || echo "Service not found or already deleted"
-
-  # ===========================================================================
-  # Deploy to Staging (persistent environment for testing before production)
-  # ===========================================================================
-  deploy-staging:
-    name: Deploy Staging
-    runs-on: ubuntu-latest
-    needs: [context, build, test-deploy-dev]
-    if: needs.context.outputs.is_production == 'true'
-    environment:
-      name: staging
-      url: ${{ steps.deploy.outputs.url }}
-
-    permissions:
-      contents: read
-      id-token: write
-
-    steps:
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: Deploy to Cloud Run (Staging)
-        id: deploy
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: ${{ env.BASE_SERVICE }}-staging
-          region: ${{ env.REGION }}
-          image: ${{ needs.build.outputs.image }}
-          flags: --allow-unauthenticated
-
-      - name: Run smoke tests
-        run: |
-          echo "Running smoke tests against staging..."
-          URL="${{ steps.deploy.outputs.url }}"
-          # Basic health check
-          for i in {1..5}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL" || echo "000")
-            if [[ "$STATUS" == "200" || "$STATUS" == "204" ]]; then
-              echo "✅ Health check passed (HTTP $STATUS)"
-              exit 0
-            fi
-            echo "Attempt $i: HTTP $STATUS, retrying in 5s..."
-            sleep 5
-          done
-          echo "❌ Health check failed"
-          exit 1
-
-  # ===========================================================================
-  # Deploy Production (main branch or tags, after staging passes)
+  # Deploy Production (main branch or tags)
   # ===========================================================================
   deploy-production:
     name: Deploy Production
     runs-on: ubuntu-latest
-    needs: [context, build, deploy-staging]
+    needs: [context, build]
     if: needs.context.outputs.is_production == 'true'
     environment:
       name: production
@@ -358,7 +256,7 @@ jobs:
         uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: ${{ needs.context.outputs.service_name }}
-          region: ${{ env.REGION }}
+          region: ${{ env.GCP_REGION }}
           image: ${{ needs.build.outputs.image }}
 
       - name: Deployment Summary
@@ -398,5 +296,5 @@ jobs:
       - name: Delete Cloud Run service
         run: |
           gcloud run services delete ${{ needs.context.outputs.service_name }} \
-            --region=${{ env.REGION }} \
+            --region=${{ env.GCP_REGION }} \
             --quiet || echo "Service not found or already deleted"
