@@ -13,6 +13,12 @@ import (
 
 var loadbalancerCmd = &cobra.Command{
 	Use:   "loadbalancer",
+	Short: "Manage Google Cloud Load Balancers",
+	Long:  `Commands for setting up and managing Google Cloud Load Balancers with multiple backend services.`,
+}
+
+var lbSetupCmd = &cobra.Command{
+	Use:   "setup",
 	Short: "Configure a load balancer for multiple services",
 	Long: `Set up a Google Cloud Load Balancer with multiple backend services:
   1. Create health checks for each service
@@ -28,8 +34,9 @@ var lbNonInteractive bool
 
 func init() {
 	rootCmd.AddCommand(loadbalancerCmd)
-	loadbalancerCmd.Flags().BoolVar(&lbDryRun, "dry-run", false, "Print commands without executing")
-	loadbalancerCmd.Flags().BoolVarP(&lbNonInteractive, "yes", "y", false, "Non-interactive mode (accept all defaults)")
+	loadbalancerCmd.AddCommand(lbSetupCmd)
+	lbSetupCmd.Flags().BoolVar(&lbDryRun, "dry-run", false, "Print commands without executing")
+	lbSetupCmd.Flags().BoolVarP(&lbNonInteractive, "yes", "y", false, "Non-interactive mode (accept all defaults)")
 }
 
 type LoadBalancerService struct {
