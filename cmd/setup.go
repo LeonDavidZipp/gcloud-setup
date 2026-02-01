@@ -135,24 +135,24 @@ GCP_PROJECT_ID=%s
 GCP_PROJECT_NUMBER=%s
 
 # GitHub Repository
-GITHUB_ORGANIZATION=%s
-GITHUB_REPOSITORY=%s
+GCP_GITHUB_ORGANIZATION=%s
+GCP_GITHUB_REPOSITORY=%s
 
 # Service Account
-SERVICE_ACCOUNT_NAME=%s
+GCP_SERVICE_ACCOUNT_NAME=%s
 
 # Artifact Registry
-ARTIFACT_REGISTRY_NAME=%s
-ARTIFACT_REGISTRY_LOCATION=%s
+GCP_ARTIFACT_REGISTRY_NAME=%s
+GCP_ARTIFACT_REGISTRY_LOCATION=%s
 
 # Cloud Run
-CLOUD_RUN_SERVICE=%s
-CLOUD_RUN_REGION=%s
+GCP_CLOUD_RUN_SERVICE=%s
+GCP_REGION=%s
 
 # Computed values (for reference)
-# SERVICE_ACCOUNT_EMAIL=%s
-# WORKLOAD_IDENTITY_PROVIDER=%s
-# ARTIFACT_REGISTRY_URL=%s
+# GCP_SERVICE_ACCOUNT_EMAIL=%s
+# GCP_WORKLOAD_IDENTITY_PROVIDER=%s
+# GCP_ARTIFACT_REGISTRY_URL=%s
 `,
 		time.Now().Format(time.RFC3339),
 		cfg.ProjectID,
@@ -206,21 +206,21 @@ func ensureGitignore(entry string) {
 func loadConfig() Config {
 	projectID := viper.GetString("GCP_PROJECT_ID")
 	projectNumber := viper.GetString("GCP_PROJECT_NUMBER")
-	saName := viper.GetString("SERVICE_ACCOUNT_NAME")
-	arLocation := viper.GetString("ARTIFACT_REGISTRY_LOCATION")
-	arName := viper.GetString("ARTIFACT_REGISTRY_NAME")
+	saName := viper.GetString("GCP_SERVICE_ACCOUNT_NAME")
+	arLocation := viper.GetString("GCP_ARTIFACT_REGISTRY_LOCATION")
+	arName := viper.GetString("GCP_ARTIFACT_REGISTRY_NAME")
 
 	return Config{
 		ProjectID:                projectID,
 		ProjectNumber:            projectNumber,
-		GitHubOrg:                viper.GetString("GITHUB_ORGANIZATION"),
-		GitHubRepo:               viper.GetString("GITHUB_REPOSITORY"),
+		GitHubOrg:                viper.GetString("GCP_GITHUB_ORGANIZATION"),
+		GitHubRepo:               viper.GetString("GCP_GITHUB_REPOSITORY"),
 		ServiceAccountName:       saName,
 		ServiceAccountEmail:      fmt.Sprintf("%s@%s.iam.gserviceaccount.com", saName, projectID),
 		ArtifactRegistryName:     arName,
 		ArtifactRegistryLocation: arLocation,
-		CloudRunService:          viper.GetString("CLOUD_RUN_SERVICE"),
-		CloudRunRegion:           viper.GetString("CLOUD_RUN_REGION"),
+		CloudRunService:          viper.GetString("GCP_CLOUD_RUN_SERVICE"),
+		CloudRunRegion:           viper.GetString("GCP_REGION"),
 		WorkloadIdentityProvider: fmt.Sprintf(
 			"projects/%s/locations/global/workloadIdentityPools/github-pool/providers/github-provider",
 			projectNumber,
@@ -411,8 +411,8 @@ func interactiveConfig() error {
 
 	fmt.Println()
 	fmt.Println("── GitHub Repository ────────────────────────")
-	gitHubOrg := viper.GetString("GITHUB_ORGANIZATION")
-	gitHubRepo := viper.GetString("GITHUB_REPOSITORY")
+	gitHubOrg := viper.GetString("GCP_GITHUB_ORGANIZATION")
+	gitHubRepo := viper.GetString("GCP_GITHUB_REPOSITORY")
 
 	if gitHubOrg == "" || gitHubRepo == "" {
 		cmd := exec.Command("git", "remote", "get-url", "origin")
@@ -428,41 +428,41 @@ func interactiveConfig() error {
 		}
 	}
 
-	gitHubOrg = prompt("GITHUB_ORGANIZATION", gitHubOrg)
-	viper.Set("GITHUB_ORGANIZATION", gitHubOrg)
+	gitHubOrg = prompt("GCP_GITHUB_ORGANIZATION", gitHubOrg)
+	viper.Set("GCP_GITHUB_ORGANIZATION", gitHubOrg)
 
-	gitHubRepo = prompt("GITHUB_REPOSITORY", gitHubRepo)
-	viper.Set("GITHUB_REPOSITORY", gitHubRepo)
+	gitHubRepo = prompt("GCP_GITHUB_REPOSITORY", gitHubRepo)
+	viper.Set("GCP_GITHUB_REPOSITORY", gitHubRepo)
 
 	fmt.Println()
 	fmt.Println("── Cloud Run ────────────────────────────────")
 
-	defaultRegion := viper.GetString("CLOUD_RUN_REGION")
+	defaultRegion := viper.GetString("GCP_REGION")
 	if defaultRegion == "" && (dryRun || nonInteractive) {
 		defaultRegion = "us-central1"
 	}
-	cloudRunRegion := prompt("CLOUD_RUN_REGION", defaultRegion)
+	cloudRunRegion := prompt("GCP_REGION", defaultRegion)
 	if cloudRunRegion == "" {
-		return fmt.Errorf("CLOUD_RUN_REGION is required (e.g., us-central1, europe-west1)")
+		return fmt.Errorf("GCP_REGION is required (e.g., us-central1, europe-west1)")
 	}
-	viper.Set("CLOUD_RUN_REGION", cloudRunRegion)
+	viper.Set("GCP_REGION", cloudRunRegion)
 
 	defaultService := gitHubRepo
-	cloudRunService := prompt("CLOUD_RUN_SERVICE", defaultService)
-	viper.Set("CLOUD_RUN_SERVICE", cloudRunService)
+	cloudRunService := prompt("GCP_CLOUD_RUN_SERVICE", defaultService)
+	viper.Set("GCP_CLOUD_RUN_SERVICE", cloudRunService)
 
 	fmt.Println()
 	fmt.Println("── Service Account ──────────────────────────")
-	saName := prompt("SERVICE_ACCOUNT_NAME", "github-actions")
-	viper.Set("SERVICE_ACCOUNT_NAME", saName)
+	saName := prompt("GCP_SERVICE_ACCOUNT_NAME", "github-actions")
+	viper.Set("GCP_SERVICE_ACCOUNT_NAME", saName)
 
 	fmt.Println()
 	fmt.Println("── Artifact Registry ────────────────────────")
-	arLocation := prompt("ARTIFACT_REGISTRY_LOCATION", cloudRunRegion)
-	viper.Set("ARTIFACT_REGISTRY_LOCATION", arLocation)
+	arLocation := prompt("GCP_ARTIFACT_REGISTRY_LOCATION", cloudRunRegion)
+	viper.Set("GCP_ARTIFACT_REGISTRY_LOCATION", arLocation)
 
-	arName := prompt("ARTIFACT_REGISTRY_NAME", "docker")
-	viper.Set("ARTIFACT_REGISTRY_NAME", arName)
+	arName := prompt("GCP_ARTIFACT_REGISTRY_NAME", "docker")
+	viper.Set("GCP_ARTIFACT_REGISTRY_NAME", arName)
 
 	return nil
 }
@@ -695,7 +695,7 @@ func configureGitHub(cfg Config) error {
 		cmd := exec.Command("gh", "secret", "list", "--repo", repo)
 		output, _ := cmd.Output()
 		if strings.Contains(string(output), name) {
-			fmt.Printf("    %s (already set, skipping)\n", name)
+			fmt.Printf("    %s (already set, skipping assignment)\n", name)
 			continue
 		}
 		fmt.Printf("    %s\n", name)
@@ -707,9 +707,10 @@ func configureGitHub(cfg Config) error {
 
 	fmt.Println("  Setting variables...")
 	variables := map[string]string{
-		"CLOUD_RUN_SERVICE":     cfg.CloudRunService,
-		"CLOUD_RUN_REGION":      cfg.CloudRunRegion,
-		"ARTIFACT_REGISTRY_URL": cfg.ArtifactRegistryURL,
+		"GCP_PROJECT_ID":        cfg.ProjectID,
+		"GCP_REGION":            cfg.CloudRunRegion,
+		"GCP_CLOUD_RUN_SERVICE": cfg.CloudRunService,
+		"GCP_ARTIFACT_REGISTRY": cfg.ArtifactRegistryName,
 	}
 
 	for name, value := range variables {
@@ -721,7 +722,7 @@ func configureGitHub(cfg Config) error {
 		cmd := exec.Command("gh", "variable", "list", "--repo", repo)
 		output, _ := cmd.Output()
 		if strings.Contains(string(output), name) {
-			fmt.Printf("    %s (already set, skipping)\n", name)
+			fmt.Printf("    %s (already set, skipping assignment)\n", name)
 			continue
 		}
 		fmt.Printf("    %s\n", name)
