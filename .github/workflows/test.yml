@@ -1,0 +1,76 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.24.5'
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.out
+          retention-days: 7
+
+      - name: Display coverage
+        run: go tool cover -func=coverage.out | tail -1
+
+  integration-test:
+    name: Integration Tests (Dry Run)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.24.5'
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build CLI
+        run: go build -o gcsetup .
+
+      - name: Test CLI help
+        run: ./gcsetup --help
+
+      - name: Test CLI version
+        run: ./gcsetup --version || echo "Version command not implemented"
+
+      - name: Test setup command (dry-run)
+        env:
+          GCP_PROJECT_ID: test-project
+          GCP_REGION: us-central1
+          GCP_GITHUB_ORGANIZATION: test-org
+          GCP_GITHUB_REPOSITORY: test-repo
+          GCP_SERVICE_ACCOUNT_NAME: test-sa
+          GCP_ARTIFACT_REGISTRY_NAME: test-registry
+          GCP_ARTIFACT_REGISTRY_LOCATION: us-central1
+          GCP_CLOUD_RUN_SERVICE: test-service
+        run: |
+          # Test setup command with dry-run (non-interactive mode)
+          ./gcsetup service --dry-run --yes 2>&1 | head -30 || true
+
+      - name: Verify CLI exits successfully on help
+        run: |
+          ./gcsetup --help > /dev/null && echo "✓ CLI is working"

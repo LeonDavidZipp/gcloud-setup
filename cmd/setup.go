@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"os"
 	"os/exec"
 	"strings"
@@ -14,28 +13,26 @@ import (
 	"github.com/spf13/viper"
 )
 
-var setupCmd = &cobra.Command{
-	Use:   "setup",
-	Short: "Set up GCloud project and GitHub repository",
-	Long: `Runs the complete setup process:
-  1. Enable required GCP APIs
-  2. Create service account with necessary roles
-  3. Set up Workload Identity Federation for GitHub
-  4. Create Artifact Registry repository
-  5. Configure GitHub repository secrets and variables`,
-	RunE: runSetup,
+var serviceCmd = &cobra.Command{
+	Use:   "service",
+	Short: "Configure service deployment in an existing GCP project",
+	Long: `Configure a service for deployment in an existing GCP project:
+  1. Set up Workload Identity Federation for GitHub
+  2. Configure GitHub repository secrets and variables
+  3. Create deployment environments`,
+	RunE: runService,
 }
 
 var dryRun bool
 var nonInteractive bool
 
 func init() {
-	rootCmd.AddCommand(setupCmd)
-	setupCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print commands without executing")
-	setupCmd.Flags().BoolVarP(&nonInteractive, "yes", "y", false, "Non-interactive mode (accept all defaults)")
+	rootCmd.AddCommand(serviceCmd)
+	serviceCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print commands without executing")
+	serviceCmd.Flags().BoolVarP(&nonInteractive, "yes", "y", false, "Non-interactive mode (accept all defaults)")
 }
 
-func runSetup(cmd *cobra.Command, args []string) error {
+func runService(cmd *cobra.Command, args []string) error {
 	if err := checkGcloud(); err != nil {
 		return err
 	}
@@ -46,7 +43,7 @@ func runSetup(cmd *cobra.Command, args []string) error {
 
 	fmt.Println()
 	fmt.Println("==============================================")
-	fmt.Println("  GCloud Project Setup - Interactive Mode")
+	fmt.Println("  Service Setup - Interactive Mode")
 	fmt.Println("==============================================")
 	fmt.Println()
 
@@ -85,10 +82,7 @@ func runSetup(cmd *cobra.Command, args []string) error {
 		name string
 		fn   func(Config) error
 	}{
-		{"Enabling APIs", enableAPIs},
-		{"Creating Service Account", createServiceAccount},
 		{"Setting up Workload Identity Federation", setupWorkloadIdentity},
-		{"Creating Artifact Registry", createArtifactRegistry},
 		{"Configuring GitHub Repository", configureGitHub},
 	}
 
@@ -106,10 +100,10 @@ func runSetup(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println("==============================================")
-	fmt.Println("  Setup Complete!")
+	fmt.Println("  Service Setup Complete!")
 	fmt.Println("==============================================")
 	fmt.Println()
-	fmt.Println("Your repository is fully configured.")
+	fmt.Println("Your service is configured for deployment.")
 	fmt.Println("Push to main or create a PR to trigger a deployment.")
 	fmt.Println()
 	fmt.Println("Configuration saved to: .env.gcloud.local")
@@ -141,24 +135,24 @@ GCP_PROJECT_ID=%s
 GCP_PROJECT_NUMBER=%s
 
 # GitHub Repository
-GITHUB_ORGANIZATION=%s
-GITHUB_REPOSITORY=%s
+GCP_GITHUB_ORGANIZATION=%s
+GCP_GITHUB_REPOSITORY=%s
 
 # Service Account
-SERVICE_ACCOUNT_NAME=%s
+GCP_SERVICE_ACCOUNT_NAME=%s
 
 # Artifact Registry
-ARTIFACT_REGISTRY_NAME=%s
-ARTIFACT_REGISTRY_LOCATION=%s
+GCP_ARTIFACT_REGISTRY_NAME=%s
+GCP_ARTIFACT_REGISTRY_LOCATION=%s
 
 # Cloud Run
-CLOUD_RUN_SERVICE=%s
-CLOUD_RUN_REGION=%s
+GCP_CLOUD_RUN_SERVICE=%s
+GCP_REGION=%s
 
 # Computed values (for reference)
-# SERVICE_ACCOUNT_EMAIL=%s
-# WORKLOAD_IDENTITY_PROVIDER=%s
-# ARTIFACT_REGISTRY_URL=%s
+# GCP_SERVICE_ACCOUNT_EMAIL=%s
+# GCP_WORKLOAD_IDENTITY_PROVIDER=%s
+# GCP_ARTIFACT_REGISTRY_URL=%s
 `,
 		time.Now().Format(time.RFC3339),
 		cfg.ProjectID,
@@ -212,21 +206,21 @@ func ensureGitignore(entry string) {
 func loadConfig() Config {
 	projectID := viper.GetString("GCP_PROJECT_ID")
 	projectNumber := viper.GetString("GCP_PROJECT_NUMBER")
-	saName := viper.GetString("SERVICE_ACCOUNT_NAME")
-	arLocation := viper.GetString("ARTIFACT_REGISTRY_LOCATION")
-	arName := viper.GetString("ARTIFACT_REGISTRY_NAME")
+	saName := viper.GetString("GCP_SERVICE_ACCOUNT_NAME")
+	arLocation := viper.GetString("GCP_ARTIFACT_REGISTRY_LOCATION")
+	arName := viper.GetString("GCP_ARTIFACT_REGISTRY_NAME")
 
 	return Config{
 		ProjectID:                projectID,
 		ProjectNumber:            projectNumber,
-		GitHubOrg:                viper.GetString("GITHUB_ORGANIZATION"),
-		GitHubRepo:               viper.GetString("GITHUB_REPOSITORY"),
+		GitHubOrg:                viper.GetString("GCP_GITHUB_ORGANIZATION"),
+		GitHubRepo:               viper.GetString("GCP_GITHUB_REPOSITORY"),
 		ServiceAccountName:       saName,
 		ServiceAccountEmail:      fmt.Sprintf("%s@%s.iam.gserviceaccount.com", saName, projectID),
 		ArtifactRegistryName:     arName,
 		ArtifactRegistryLocation: arLocation,
-		CloudRunService:          viper.GetString("CLOUD_RUN_SERVICE"),
-		CloudRunRegion:           viper.GetString("CLOUD_RUN_REGION"),
+		CloudRunService:          viper.GetString("GCP_CLOUD_RUN_SERVICE"),
+		CloudRunRegion:           viper.GetString("GCP_REGION"),
 		WorkloadIdentityProvider: fmt.Sprintf(
 			"projects/%s/locations/global/workloadIdentityPools/github-pool/providers/github-provider",
 			projectNumber,
@@ -302,8 +296,7 @@ func interactiveConfig() error {
 
 		suggestedID := ""
 		if repoName != "" {
-
-			suggestedID = fmt.Sprintf("%s-%d", strings.ToLower(repoName), randomSuffix())
+			suggestedID = fmt.Sprintf("%s-%s", strings.ToLower(repoName), randomSuffix())
 		}
 
 		projectID = prompt("PROJECT_ID (globally unique)", suggestedID)
@@ -418,8 +411,8 @@ func interactiveConfig() error {
 
 	fmt.Println()
 	fmt.Println("── GitHub Repository ────────────────────────")
-	gitHubOrg := viper.GetString("GITHUB_ORGANIZATION")
-	gitHubRepo := viper.GetString("GITHUB_REPOSITORY")
+	gitHubOrg := viper.GetString("GCP_GITHUB_ORGANIZATION")
+	gitHubRepo := viper.GetString("GCP_GITHUB_REPOSITORY")
 
 	if gitHubOrg == "" || gitHubRepo == "" {
 		cmd := exec.Command("git", "remote", "get-url", "origin")
@@ -435,41 +428,41 @@ func interactiveConfig() error {
 		}
 	}
 
-	gitHubOrg = prompt("GITHUB_ORGANIZATION", gitHubOrg)
-	viper.Set("GITHUB_ORGANIZATION", gitHubOrg)
+	gitHubOrg = prompt("GCP_GITHUB_ORGANIZATION", gitHubOrg)
+	viper.Set("GCP_GITHUB_ORGANIZATION", gitHubOrg)
 
-	gitHubRepo = prompt("GITHUB_REPOSITORY", gitHubRepo)
-	viper.Set("GITHUB_REPOSITORY", gitHubRepo)
+	gitHubRepo = prompt("GCP_GITHUB_REPOSITORY", gitHubRepo)
+	viper.Set("GCP_GITHUB_REPOSITORY", gitHubRepo)
 
 	fmt.Println()
 	fmt.Println("── Cloud Run ────────────────────────────────")
 
-	defaultRegion := viper.GetString("CLOUD_RUN_REGION")
+	defaultRegion := viper.GetString("GCP_REGION")
 	if defaultRegion == "" && (dryRun || nonInteractive) {
 		defaultRegion = "us-central1"
 	}
-	cloudRunRegion := prompt("CLOUD_RUN_REGION", defaultRegion)
+	cloudRunRegion := prompt("GCP_REGION", defaultRegion)
 	if cloudRunRegion == "" {
-		return fmt.Errorf("CLOUD_RUN_REGION is required (e.g., us-central1, europe-west1)")
+		return fmt.Errorf("GCP_REGION is required (e.g., us-central1, europe-west1)")
 	}
-	viper.Set("CLOUD_RUN_REGION", cloudRunRegion)
+	viper.Set("GCP_REGION", cloudRunRegion)
 
 	defaultService := gitHubRepo
-	cloudRunService := prompt("CLOUD_RUN_SERVICE", defaultService)
-	viper.Set("CLOUD_RUN_SERVICE", cloudRunService)
+	cloudRunService := prompt("GCP_CLOUD_RUN_SERVICE", defaultService)
+	viper.Set("GCP_CLOUD_RUN_SERVICE", cloudRunService)
 
 	fmt.Println()
 	fmt.Println("── Service Account ──────────────────────────")
-	saName := prompt("SERVICE_ACCOUNT_NAME", "github-actions")
-	viper.Set("SERVICE_ACCOUNT_NAME", saName)
+	saName := prompt("GCP_SERVICE_ACCOUNT_NAME", "github-actions")
+	viper.Set("GCP_SERVICE_ACCOUNT_NAME", saName)
 
 	fmt.Println()
 	fmt.Println("── Artifact Registry ────────────────────────")
-	arLocation := prompt("ARTIFACT_REGISTRY_LOCATION", cloudRunRegion)
-	viper.Set("ARTIFACT_REGISTRY_LOCATION", arLocation)
+	arLocation := prompt("GCP_ARTIFACT_REGISTRY_LOCATION", cloudRunRegion)
+	viper.Set("GCP_ARTIFACT_REGISTRY_LOCATION", arLocation)
 
-	arName := prompt("ARTIFACT_REGISTRY_NAME", "docker")
-	viper.Set("ARTIFACT_REGISTRY_NAME", arName)
+	arName := prompt("GCP_ARTIFACT_REGISTRY_NAME", "docker")
+	viper.Set("GCP_ARTIFACT_REGISTRY_NAME", arName)
 
 	return nil
 }
@@ -531,10 +524,6 @@ func listBillingAccounts() ([]billingAccount, error) {
 	return result, nil
 }
 
-func randomSuffix() int {
-	return rand.Intn(9000) + 1000
-}
-
 func checkGcloud() error {
 	if _, err := exec.LookPath("gcloud"); err != nil {
 		return fmt.Errorf("gcloud CLI not found. Please install the Google Cloud SDK")
@@ -566,74 +555,7 @@ func runCommandSilent(args ...string) error {
 	return nil
 }
 
-func enableAPIs(cfg Config) error {
-	apis := []string{
-		"cloudresourcemanager.googleapis.com",
-		"iam.googleapis.com",
-		"iamcredentials.googleapis.com",
-		"artifactregistry.googleapis.com",
-		"run.googleapis.com",
-		"secretmanager.googleapis.com",
-		"cloudbuild.googleapis.com",
-	}
-
-	for _, api := range apis {
-		fmt.Printf("  Enabling %s\n", api)
-		if err := runCommandSilent("services", "enable", api, "--project="+cfg.ProjectID); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func createServiceAccount(cfg Config) error {
-	fmt.Printf("  Creating service account: %s\n", cfg.ServiceAccountName)
-	err := runCommandSilent("iam", "service-accounts", "create", cfg.ServiceAccountName,
-		"--project="+cfg.ProjectID,
-		"--display-name="+cfg.ServiceAccountName+" Service Account",
-		"--description=Service account for GitHub Actions CI/CD",
-	)
-	if err != nil {
-		fmt.Println("  (service account may already exist, continuing...)")
-	}
-
-	roles := []string{
-		"roles/run.developer",
-		"roles/artifactregistry.writer",
-		"roles/secretmanager.secretAccessor",
-		"roles/iam.serviceAccountUser",
-		"roles/cloudbuild.builds.builder",
-		"roles/cloudbuild.builds.viewer",
-		"roles/logging.logWriter",
-	}
-
-	for _, role := range roles {
-		fmt.Printf("  Granting %s\n", role)
-		var bindErr error
-		for attempt := 0; attempt < 120; attempt++ {
-			bindErr = runCommandSilent("projects", "add-iam-policy-binding", cfg.ProjectID,
-				"--member=serviceAccount:"+cfg.ServiceAccountEmail,
-				"--role="+role,
-				"--condition=None",
-			)
-			if bindErr == nil {
-				break
-			}
-			if attempt == 0 {
-				fmt.Printf("    Waiting for service account to propagate...")
-			}
-			time.Sleep(5 * time.Second)
-		}
-		if bindErr != nil {
-			return bindErr
-		}
-	}
-
-	return nil
-}
-
 func setupWorkloadIdentity(cfg Config) error {
-
 	fmt.Println("  Checking Workload Identity Pool status...")
 	poolState := getPoolState(cfg.ProjectID, "github-pool")
 
@@ -755,20 +677,6 @@ func getProviderState(projectID, poolID, providerID string) string {
 	return "ACTIVE"
 }
 
-func createArtifactRegistry(cfg Config) error {
-	fmt.Printf("  Creating repository: %s\n", cfg.ArtifactRegistryName)
-	err := runCommandSilent("artifacts", "repositories", "create", cfg.ArtifactRegistryName,
-		"--project="+cfg.ProjectID,
-		"--location="+cfg.ArtifactRegistryLocation,
-		"--repository-format=docker",
-		"--description=Container registry for CI/CD",
-	)
-	if err != nil {
-		fmt.Println("  (repository may already exist, continuing...)")
-	}
-	return nil
-}
-
 func configureGitHub(cfg Config) error {
 	repo := fmt.Sprintf("%s/%s", cfg.GitHubOrg, cfg.GitHubRepo)
 
@@ -787,7 +695,7 @@ func configureGitHub(cfg Config) error {
 		cmd := exec.Command("gh", "secret", "list", "--repo", repo)
 		output, _ := cmd.Output()
 		if strings.Contains(string(output), name) {
-			fmt.Printf("    %s (already set, skipping)\n", name)
+			fmt.Printf("    %s (already set, skipping assignment)\n", name)
 			continue
 		}
 		fmt.Printf("    %s\n", name)
@@ -799,9 +707,10 @@ func configureGitHub(cfg Config) error {
 
 	fmt.Println("  Setting variables...")
 	variables := map[string]string{
-		"CLOUD_RUN_SERVICE":     cfg.CloudRunService,
-		"CLOUD_RUN_REGION":      cfg.CloudRunRegion,
-		"ARTIFACT_REGISTRY_URL": cfg.ArtifactRegistryURL,
+		"GCP_PROJECT_ID":        cfg.ProjectID,
+		"GCP_REGION":            cfg.CloudRunRegion,
+		"GCP_CLOUD_RUN_SERVICE": cfg.CloudRunService,
+		"GCP_ARTIFACT_REGISTRY": cfg.ArtifactRegistryName,
 	}
 
 	for name, value := range variables {
@@ -813,7 +722,7 @@ func configureGitHub(cfg Config) error {
 		cmd := exec.Command("gh", "variable", "list", "--repo", repo)
 		output, _ := cmd.Output()
 		if strings.Contains(string(output), name) {
-			fmt.Printf("    %s (already set, skipping)\n", name)
+			fmt.Printf("    %s (already set, skipping assignment)\n", name)
 			continue
 		}
 		fmt.Printf("    %s\n", name)

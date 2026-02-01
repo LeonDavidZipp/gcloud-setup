@@ -74,19 +74,19 @@ GCP_PROJECT_ID=my-project-id
 GCP_PROJECT_NUMBER=123456789012
 
 # GitHub Repository
-GITHUB_ORGANIZATION=my-org
-GITHUB_REPOSITORY=my-repo
+GCP_GITHUB_ORGANIZATION=my-org
+GCP_GITHUB_REPOSITORY=my-repo
 
 # Service Account
-SERVICE_ACCOUNT_NAME=github-actions
+GCP_SERVICE_ACCOUNT_NAME=github-actions
 
 # Artifact Registry
-ARTIFACT_REGISTRY_NAME=docker-registry
-ARTIFACT_REGISTRY_LOCATION=europe-west1
+GCP_ARTIFACT_REGISTRY_NAME=docker-registry
+GCP_ARTIFACT_REGISTRY_LOCATION=europe-west1
 
 # Cloud Run
-CLOUD_RUN_SERVICE=my-api
-CLOUD_RUN_REGION=europe-west1
+GCP_CLOUD_RUN_SERVICE=my-api
+GCP_REGION=europe-west1
 ```
 
 > **Tip:** Find your project number with:

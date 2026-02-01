@@ -17,8 +17,10 @@ var rootCmd = &cobra.Command{
 	Long: `A CLI tool to set up GCloud projects with GitHub Actions CI/CD.
 
 Commands:
-  gcsetup init   - Initialize project with workflow and .env.gcloud template
-  gcsetup setup  - Set up GCloud project and GitHub repository`,
+  gcsetup init                - Initialize local project files (workflows, .env template)
+  gcsetup project create      - Create a new GCP project and infrastructure
+  gcsetup service setup       - Configure service deployment in existing GCP project
+  gcsetup loadbalancer setup  - Configure a load balancer for multiple services`,
 }
 
 func Execute() {
@@ -76,13 +78,13 @@ func initConfig() {
 var RequiredVars = []string{
 	"GCP_PROJECT_ID",
 	"GCP_PROJECT_NUMBER",
-	"GITHUB_ORGANIZATION",
-	"GITHUB_REPOSITORY",
-	"SERVICE_ACCOUNT_NAME",
-	"ARTIFACT_REGISTRY_NAME",
-	"ARTIFACT_REGISTRY_LOCATION",
-	"CLOUD_RUN_SERVICE",
-	"CLOUD_RUN_REGION",
+	"GCP_GITHUB_ORGANIZATION",
+	"GCP_GITHUB_REPOSITORY",
+	"GCP_SERVICE_ACCOUNT_NAME",
+	"GCP_ARTIFACT_REGISTRY_NAME",
+	"GCP_ARTIFACT_REGISTRY_LOCATION",
+	"GCP_CLOUD_RUN_SERVICE",
+	"GCP_REGION",
 }
 
 func ValidateConfig() error {
