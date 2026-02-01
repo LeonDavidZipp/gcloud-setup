@@ -191,12 +191,14 @@ func createProjectServiceAccount(cfg ProjectConfig) error {
 	cfg.ServiceAccountEmail = fmt.Sprintf("%s@%s.iam.gserviceaccount.com", cfg.ServiceAccountName, cfg.ProjectID)
 
 	if projectDryRun {
-		fmt.Printf("  [dry-run] gcloud iam service-accounts create %s --project=%s\n", cfg.ServiceAccountName, cfg.ProjectID)
+		fmt.Printf("  [dry-run] gcloud iam service-accounts create %s "+
+			"--project=%s\n", cfg.ServiceAccountName, cfg.ProjectID)
 		return nil
 	}
 
 	fmt.Printf("  Creating service account '%s'...\n", cfg.ServiceAccountName)
-	cmd := exec.Command("gcloud", "iam", "service-accounts", "create", cfg.ServiceAccountName, "--project="+cfg.ProjectID)
+	cmd := exec.Command("gcloud", "iam", "service-accounts", "create",
+		cfg.ServiceAccountName, "--project="+cfg.ProjectID)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to create service account: %w", err)
 	}
@@ -207,7 +209,8 @@ func createProjectServiceAccount(cfg ProjectConfig) error {
 func setupProjectWorkloadIdentity(cfg ProjectConfig) error {
 	if projectDryRun {
 		fmt.Println("  [dry-run] Setting up Workload Identity Federation")
-		fmt.Printf("  [dry-run] gcloud iam workload-identity-pools create github-pool --project=%s --location=global\n", cfg.ProjectID)
+		fmt.Printf("  [dry-run] gcloud iam workload-identity-pools create "+
+			"github-pool --project=%s --location=global\n", cfg.ProjectID)
 		fmt.Println("  [dry-run] gcloud iam workload-identity-pools providers create-oidc github-provider ...")
 		return nil
 	}
@@ -242,7 +245,8 @@ func createProjectArtifactRegistry(cfg ProjectConfig) error {
 		cfg.ProjectID, cfg.ArtifactRegistryName)
 
 	if projectDryRun {
-		fmt.Printf("  [dry-run] gcloud artifacts repositories create %s --repository-format=docker --location=%s --project=%s\n",
+		fmt.Printf("  [dry-run] gcloud artifacts repositories create %s "+
+			"--repository-format=docker --location=%s --project=%s\n",
 			cfg.ArtifactRegistryName, cfg.ArtifactRegistryLocation, cfg.ProjectID)
 		return nil
 	}

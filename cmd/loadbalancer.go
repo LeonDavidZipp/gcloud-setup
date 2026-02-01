@@ -330,7 +330,6 @@ func createURLMap(cfg LoadBalancerConfig) error {
 		return fmt.Errorf("failed to create URL map: %w", err)
 	}
 
-	// Add path rules for each service
 	for _, service := range cfg.Services {
 		backendName := fmt.Sprintf("%s-backend", service.Name)
 
