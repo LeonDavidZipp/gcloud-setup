@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -148,8 +149,10 @@ func createGCPProject(cfg ProjectConfig) error {
 	}
 
 	fmt.Printf("  Creating project '%s'...\n", cfg.ProjectID)
-	// Note: This would need actual implementation with exec.Command
-	// For now, we'll just log it
+	cmd := exec.Command("gcloud", "projects", "create", cfg.ProjectID, "--name="+cfg.ProjectName)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to create project: %w", err)
+	}
 	fmt.Printf("  ✓ Project '%s' created\n", cfg.ProjectID)
 	return nil
 }
@@ -174,6 +177,11 @@ func enableProjectAPIs(cfg ProjectConfig) error {
 	fmt.Printf("  Enabling APIs for project '%s'...\n", cfg.ProjectID)
 	for _, api := range apis {
 		fmt.Printf("    Enabling %s\n", api)
+		args := []string{"services", "enable", api, "--project=" + cfg.ProjectID}
+		cmd := exec.Command("gcloud", args...)
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to enable API %s: %w", api, err)
+		}
 	}
 	fmt.Printf("  ✓ APIs enabled\n")
 	return nil
@@ -183,11 +191,15 @@ func createProjectServiceAccount(cfg ProjectConfig) error {
 	cfg.ServiceAccountEmail = fmt.Sprintf("%s@%s.iam.gserviceaccount.com", cfg.ServiceAccountName, cfg.ProjectID)
 
 	if projectDryRun {
-		fmt.Printf("  [dry-run] Creating service account %s\n", cfg.ServiceAccountEmail)
+		fmt.Printf("  [dry-run] gcloud iam service-accounts create %s --project=%s\n", cfg.ServiceAccountName, cfg.ProjectID)
 		return nil
 	}
 
 	fmt.Printf("  Creating service account '%s'...\n", cfg.ServiceAccountName)
+	cmd := exec.Command("gcloud", "iam", "service-accounts", "create", cfg.ServiceAccountName, "--project="+cfg.ProjectID)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to create service account: %w", err)
+	}
 	fmt.Printf("  ✓ Service account created: %s\n", cfg.ServiceAccountEmail)
 	return nil
 }
@@ -195,10 +207,32 @@ func createProjectServiceAccount(cfg ProjectConfig) error {
 func setupProjectWorkloadIdentity(cfg ProjectConfig) error {
 	if projectDryRun {
 		fmt.Println("  [dry-run] Setting up Workload Identity Federation")
+		fmt.Printf("  [dry-run] gcloud iam workload-identity-pools create github-pool --project=%s --location=global\n", cfg.ProjectID)
+		fmt.Println("  [dry-run] gcloud iam workload-identity-pools providers create-oidc github-provider ...")
 		return nil
 	}
 
 	fmt.Println("  Setting up Workload Identity Federation...")
+
+	fmt.Println("    Creating workload identity pool 'github-pool'")
+	cmd := exec.Command("gcloud", "iam", "workload-identity-pools", "create", "github-pool",
+		"--project="+cfg.ProjectID, "--location=global", "--display-name=GitHub")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to create workload identity pool: %w", err)
+	}
+
+	fmt.Println("    Creating OIDC provider 'github-provider'")
+	cmd = exec.Command("gcloud", "iam", "workload-identity-pools", "providers", "create-oidc", "github-provider",
+		"--project="+cfg.ProjectID,
+		"--location=global",
+		"--workload-identity-pool=github-pool",
+		"--display-name=GitHub",
+		"--attribute-mapping=google.subject=assertion.sub,assertion.aud=assertion.aud",
+		"--issuer-uri=https://token.actions.githubusercontent.com")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to create OIDC provider: %w", err)
+	}
+
 	fmt.Println("  ✓ Workload Identity Federation configured")
 	return nil
 }
@@ -208,11 +242,19 @@ func createProjectArtifactRegistry(cfg ProjectConfig) error {
 		cfg.ProjectID, cfg.ArtifactRegistryName)
 
 	if projectDryRun {
-		fmt.Printf("  [dry-run] Creating artifact registry %s\n", cfg.ArtifactRegistryName)
+		fmt.Printf("  [dry-run] gcloud artifacts repositories create %s --repository-format=docker --location=%s --project=%s\n",
+			cfg.ArtifactRegistryName, cfg.ArtifactRegistryLocation, cfg.ProjectID)
 		return nil
 	}
 
 	fmt.Printf("  Creating artifact registry '%s'...\n", cfg.ArtifactRegistryName)
+	cmd := exec.Command("gcloud", "artifacts", "repositories", "create", cfg.ArtifactRegistryName,
+		"--repository-format=docker",
+		"--location="+cfg.ArtifactRegistryLocation,
+		"--project="+cfg.ProjectID)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to create artifact registry: %w", err)
+	}
 	fmt.Printf("  ✓ Artifact registry created: %s\n", cfg.ArtifactRegistryURL)
 	return nil
 }
