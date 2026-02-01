@@ -17,9 +17,10 @@ var rootCmd = &cobra.Command{
 	Long: `A CLI tool to set up GCloud projects with GitHub Actions CI/CD.
 
 Commands:
-  gcsetup init               - Initialize project with workflow and .env.gcloud template
-  gcsetup setup              - Set up GCloud project and GitHub repository
-  gcsetup loadbalancer setup - Configure a load balancer for multiple services`,
+  gcsetup init                - Initialize local project files (workflows, .env template)
+  gcsetup project create      - Create a new GCP project and infrastructure
+  gcsetup service setup       - Configure service deployment in existing GCP project
+  gcsetup loadbalancer setup  - Configure a load balancer for multiple services`,
 }
 
 func Execute() {

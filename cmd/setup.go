@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"os"
 	"os/exec"
 	"strings"
@@ -14,28 +13,26 @@ import (
 	"github.com/spf13/viper"
 )
 
-var setupCmd = &cobra.Command{
-	Use:   "setup",
-	Short: "Set up GCloud project and GitHub repository",
-	Long: `Runs the complete setup process:
-  1. Enable required GCP APIs
-  2. Create service account with necessary roles
-  3. Set up Workload Identity Federation for GitHub
-  4. Create Artifact Registry repository
-  5. Configure GitHub repository secrets and variables`,
-	RunE: runSetup,
+var serviceCmd = &cobra.Command{
+	Use:   "service",
+	Short: "Configure service deployment in an existing GCP project",
+	Long: `Configure a service for deployment in an existing GCP project:
+  1. Set up Workload Identity Federation for GitHub
+  2. Configure GitHub repository secrets and variables
+  3. Create deployment environments`,
+	RunE: runService,
 }
 
 var dryRun bool
 var nonInteractive bool
 
 func init() {
-	rootCmd.AddCommand(setupCmd)
-	setupCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print commands without executing")
-	setupCmd.Flags().BoolVarP(&nonInteractive, "yes", "y", false, "Non-interactive mode (accept all defaults)")
+	rootCmd.AddCommand(serviceCmd)
+	serviceCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print commands without executing")
+	serviceCmd.Flags().BoolVarP(&nonInteractive, "yes", "y", false, "Non-interactive mode (accept all defaults)")
 }
 
-func runSetup(cmd *cobra.Command, args []string) error {
+func runService(cmd *cobra.Command, args []string) error {
 	if err := checkGcloud(); err != nil {
 		return err
 	}
@@ -46,7 +43,7 @@ func runSetup(cmd *cobra.Command, args []string) error {
 
 	fmt.Println()
 	fmt.Println("==============================================")
-	fmt.Println("  GCloud Project Setup - Interactive Mode")
+	fmt.Println("  Service Setup - Interactive Mode")
 	fmt.Println("==============================================")
 	fmt.Println()
 
@@ -85,10 +82,7 @@ func runSetup(cmd *cobra.Command, args []string) error {
 		name string
 		fn   func(Config) error
 	}{
-		{"Enabling APIs", enableAPIs},
-		{"Creating Service Account", createServiceAccount},
 		{"Setting up Workload Identity Federation", setupWorkloadIdentity},
-		{"Creating Artifact Registry", createArtifactRegistry},
 		{"Configuring GitHub Repository", configureGitHub},
 	}
 
@@ -106,10 +100,10 @@ func runSetup(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println("==============================================")
-	fmt.Println("  Setup Complete!")
+	fmt.Println("  Service Setup Complete!")
 	fmt.Println("==============================================")
 	fmt.Println()
-	fmt.Println("Your repository is fully configured.")
+	fmt.Println("Your service is configured for deployment.")
 	fmt.Println("Push to main or create a PR to trigger a deployment.")
 	fmt.Println()
 	fmt.Println("Configuration saved to: .env.gcloud.local")
@@ -302,8 +296,7 @@ func interactiveConfig() error {
 
 		suggestedID := ""
 		if repoName != "" {
-
-			suggestedID = fmt.Sprintf("%s-%d", strings.ToLower(repoName), randomSuffix())
+			suggestedID = fmt.Sprintf("%s-%s", strings.ToLower(repoName), randomSuffix())
 		}
 
 		projectID = prompt("PROJECT_ID (globally unique)", suggestedID)
@@ -531,10 +524,6 @@ func listBillingAccounts() ([]billingAccount, error) {
 	return result, nil
 }
 
-func randomSuffix() int {
-	return rand.Intn(9000) + 1000
-}
-
 func checkGcloud() error {
 	if _, err := exec.LookPath("gcloud"); err != nil {
 		return fmt.Errorf("gcloud CLI not found. Please install the Google Cloud SDK")
@@ -566,74 +555,7 @@ func runCommandSilent(args ...string) error {
 	return nil
 }
 
-func enableAPIs(cfg Config) error {
-	apis := []string{
-		"cloudresourcemanager.googleapis.com",
-		"iam.googleapis.com",
-		"iamcredentials.googleapis.com",
-		"artifactregistry.googleapis.com",
-		"run.googleapis.com",
-		"secretmanager.googleapis.com",
-		"cloudbuild.googleapis.com",
-	}
-
-	for _, api := range apis {
-		fmt.Printf("  Enabling %s\n", api)
-		if err := runCommandSilent("services", "enable", api, "--project="+cfg.ProjectID); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func createServiceAccount(cfg Config) error {
-	fmt.Printf("  Creating service account: %s\n", cfg.ServiceAccountName)
-	err := runCommandSilent("iam", "service-accounts", "create", cfg.ServiceAccountName,
-		"--project="+cfg.ProjectID,
-		"--display-name="+cfg.ServiceAccountName+" Service Account",
-		"--description=Service account for GitHub Actions CI/CD",
-	)
-	if err != nil {
-		fmt.Println("  (service account may already exist, continuing...)")
-	}
-
-	roles := []string{
-		"roles/run.developer",
-		"roles/artifactregistry.writer",
-		"roles/secretmanager.secretAccessor",
-		"roles/iam.serviceAccountUser",
-		"roles/cloudbuild.builds.builder",
-		"roles/cloudbuild.builds.viewer",
-		"roles/logging.logWriter",
-	}
-
-	for _, role := range roles {
-		fmt.Printf("  Granting %s\n", role)
-		var bindErr error
-		for attempt := 0; attempt < 120; attempt++ {
-			bindErr = runCommandSilent("projects", "add-iam-policy-binding", cfg.ProjectID,
-				"--member=serviceAccount:"+cfg.ServiceAccountEmail,
-				"--role="+role,
-				"--condition=None",
-			)
-			if bindErr == nil {
-				break
-			}
-			if attempt == 0 {
-				fmt.Printf("    Waiting for service account to propagate...")
-			}
-			time.Sleep(5 * time.Second)
-		}
-		if bindErr != nil {
-			return bindErr
-		}
-	}
-
-	return nil
-}
-
 func setupWorkloadIdentity(cfg Config) error {
-
 	fmt.Println("  Checking Workload Identity Pool status...")
 	poolState := getPoolState(cfg.ProjectID, "github-pool")
 
@@ -753,20 +675,6 @@ func getProviderState(projectID, poolID, providerID string) string {
 		return "DELETED"
 	}
 	return "ACTIVE"
-}
-
-func createArtifactRegistry(cfg Config) error {
-	fmt.Printf("  Creating repository: %s\n", cfg.ArtifactRegistryName)
-	err := runCommandSilent("artifacts", "repositories", "create", cfg.ArtifactRegistryName,
-		"--project="+cfg.ProjectID,
-		"--location="+cfg.ArtifactRegistryLocation,
-		"--repository-format=docker",
-		"--description=Container registry for CI/CD",
-	)
-	if err != nil {
-		fmt.Println("  (repository may already exist, continuing...)")
-	}
-	return nil
 }
 
 func configureGitHub(cfg Config) error {
